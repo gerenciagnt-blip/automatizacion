@@ -1,0 +1,8 @@
+# ============================================================
+# ORION - pnpm workspace configuration
+# Defines monorepo structure (folders populated in Sprint 1)
+# ============================================================
+
+packages:
+  - "apps/*"
+  - "packages/*"

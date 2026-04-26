@@ -1,0 +1,33 @@
+{
+  "name": "orion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Orion — Multi-tenant conversational CRM for WhatsApp Cloud API. AI-native, omnichannel-ready.",
+  "license": "UNLICENSED",
+  "author": {
+    "name": "Jhon Alexander Sepulveda",
+    "email": "gerencia.gnt@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gerenciagnt-blip/automatizacion.git"
+  },
+  "engines": {
+    "node": ">=20.0.0 <21.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "preinstall": "npx only-allow pnpm",
+    "build": "echo 'Build pipeline configured in Sprint 1'",
+    "dev": "echo 'Dev pipeline configured in Sprint 2'",
+    "test": "echo 'Test pipeline configured in Sprint 2'",
+    "lint": "echo 'Linter (Biome) configured in Sprint 1'",
+    "format": "echo 'Formatter (Biome) configured in Sprint 1'",
+    "typecheck": "echo 'Typecheck configured in Sprint 1'"
+  },
+  "devDependencies": {},
+  "pnpm": {
+    "onlyBuiltDependencies": []
+  }
+}

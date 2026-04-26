@@ -1,0 +1,99 @@
+# ============================================================
+# ORION - .gitignore
+# Generated: Sprint 0 - Preflight
+# ============================================================
+
+# ─── Dependencies ───────────────────────────────────────────
+node_modules/
+.pnpm-store/
+.yarn/
+jspm_packages/
+
+# ─── Build output ───────────────────────────────────────────
+dist/
+build/
+out/
+.next/
+.nuxt/
+.turbo/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# ─── Environment & secrets ──────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+*.pem
+*.key
+*.crt
+*.p12
+secrets/
+credentials.json
+
+# ─── Logs ───────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ─── Testing & coverage ─────────────────────────────────────
+coverage/
+.nyc_output/
+*.lcov
+test-results/
+playwright-report/
+playwright/.cache/
+
+# ─── IDE & editors ──────────────────────────────────────────
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+*.swp
+*.swo
+*~
+.project
+.classpath
+
+# ─── OS files ───────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ─── Claude Code local config ───────────────────────────────
+.claude/
+
+# ─── Prisma generated ───────────────────────────────────────
+**/prisma/migrations/dev.db*
+**/prisma/*.db
+**/prisma/*.db-journal
+
+# ─── Docker volumes (local data) ────────────────────────────
+ops/docker/data/
+ops/docker/postgres-data/
+ops/docker/redis-data/
+
+# ─── Misc ───────────────────────────────────────────────────
+.cache/
+.eslintcache
+.biomecache
+.parcel-cache/
+.serverless/
+.fusebox/
+.dynamodb/
+.tern-port
+*.tgz
+.npm
