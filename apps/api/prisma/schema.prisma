@@ -1,0 +1,511 @@
+// =============================================================================
+//  ORION — Prisma schema
+// -----------------------------------------------------------------------------
+//  Multi-tenant data model. Strategy: SHARED DATABASE / SHARED SCHEMA with a
+//  `tenant_id` discriminator column on every table except `Tenant` itself.
+//
+//  Tenets enforced here:
+//    • Every table that is not Tenant carries `tenantId` and a composite
+//      index `(tenantId, ...)` on every column the application queries by.
+//    • All FK relations declare `onDelete` and `onUpdate` explicitly.
+//    • Auditing fields (`createdAt`, `updatedAt`, `createdBy`, `updatedBy`)
+//      are present on every domain table.
+//    • Idempotency keys (e.g. `Message.waMessageId`) are uniquely indexed.
+//    • Sensitive material (WhatsApp access tokens) is stored encrypted at the
+//      application layer using `ENCRYPTION_KEY`.
+//
+//  See: docs/adr/0001-multi-tenant-isolation-strategy.md
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+//  Enums
+// =============================================================================
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  AGENT
+
+  @@map("user_role")
+}
+
+enum TenantPlan {
+  FREE
+  STARTER
+  PRO
+  ENTERPRISE
+
+  @@map("tenant_plan")
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+
+  @@map("invitation_status")
+}
+
+enum ConversationStatus {
+  OPEN
+  ASSIGNED
+  AWAITING_CUSTOMER
+  RESOLVED
+  CLOSED
+
+  @@map("conversation_status")
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+
+  @@map("message_direction")
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  DOCUMENT
+  STICKER
+  LOCATION
+  CONTACTS
+  INTERACTIVE
+  TEMPLATE
+  REACTION
+  SYSTEM
+
+  @@map("message_type")
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+
+  @@map("message_status")
+}
+
+enum HandoffReason {
+  BOT_ESCALATION
+  USER_REQUEST
+  MANAGER_REASSIGN
+  AUTO_ROUTING
+  TIMEOUT
+  AGENT_OFFLINE
+
+  @@map("handoff_reason")
+}
+
+enum AuditActorType {
+  USER
+  SYSTEM
+  BOT
+  EXTERNAL
+
+  @@map("audit_actor_type")
+}
+
+// =============================================================================
+//  Tenant — the root of every isolation boundary
+// =============================================================================
+
+model Tenant {
+  id        String     @id @default(cuid())
+  name      String
+  slug      String     @unique
+  plan      TenantPlan @default(FREE)
+  isActive  Boolean    @default(true) @map("is_active")
+  timezone  String     @default("UTC")
+  locale    String     @default("es")
+  // Soft branding for the inbox header (logo URL, accent colour, etc.)
+  branding  Json?
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  users                 User[]
+  invitations           Invitation[]
+  contacts              Contact[]
+  conversations         Conversation[]
+  messages              Message[]
+  botConfigs            BotConfig[]
+  whatsappIntegrations  WhatsAppIntegration[]
+  assignmentLogs        AssignmentLog[]
+  auditEvents           AuditEvent[]
+  sessions              Session[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@map("tenants")
+}
+
+// =============================================================================
+//  Identity & Access
+// =============================================================================
+
+model User {
+  id              String    @id @default(cuid())
+  tenantId        String    @map("tenant_id")
+  email           String
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  passwordHash    String    @map("password_hash")
+  firstName       String    @map("first_name")
+  lastName        String    @map("last_name")
+  role            UserRole
+  isActive        Boolean   @default(true) @map("is_active")
+  // Workload assistance: max concurrent conversations the agent can hold.
+  maxConcurrentConversations Int @default(20) @map("max_concurrent_conversations")
+  lastLoginAt     DateTime? @map("last_login_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  // Relations
+  tenant                 Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  sessions               Session[]
+  invitationsSent        Invitation[]    @relation("InvitationCreator")
+  acceptedInvitation     Invitation?     @relation("InvitationAcceptedBy")
+  assignedConversations  Conversation[]  @relation("ConversationAssignee")
+  sentMessages           Message[]       @relation("MessageSender")
+  assignmentsFrom        AssignmentLog[] @relation("AssignmentFrom")
+  assignmentsTo          AssignmentLog[] @relation("AssignmentTo")
+  auditEvents            AuditEvent[]    @relation("AuditActor")
+
+  @@unique([tenantId, email])
+  @@index([tenantId, role])
+  @@index([tenantId, isActive])
+  @@map("users")
+}
+
+model Invitation {
+  id                 String           @id @default(cuid())
+  tenantId           String           @map("tenant_id")
+  email              String
+  role               UserRole
+  // Hash of the invitation token (the raw token is sent in the email and
+  // never stored). Lookup is by `tokenHash`.
+  tokenHash          String           @unique @map("token_hash")
+  status             InvitationStatus @default(PENDING)
+  expiresAt          DateTime         @map("expires_at")
+  acceptedAt         DateTime?        @map("accepted_at")
+  acceptedByUserId   String?          @unique @map("accepted_by_user_id")
+  invitedByUserId    String           @map("invited_by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  inviter        User   @relation("InvitationCreator", fields: [invitedByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  acceptedByUser User?  @relation("InvitationAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([tenantId, status])
+  @@index([tenantId, email])
+  @@index([expiresAt])
+  @@map("invitations")
+}
+
+model Session {
+  id               String    @id @default(cuid())
+  userId           String    @map("user_id")
+  // Denormalised for fast tenant-scoped queries / blacklist lookups.
+  tenantId         String    @map("tenant_id")
+  refreshTokenHash String    @unique @map("refresh_token_hash")
+  userAgent        String?   @map("user_agent")
+  ipAddress        String?   @map("ip_address")
+  lastUsedAt       DateTime  @default(now()) @map("last_used_at")
+  expiresAt        DateTime  @map("expires_at")
+  revokedAt        DateTime? @map("revoked_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([userId])
+  @@index([tenantId, expiresAt])
+  @@index([revokedAt])
+  @@map("sessions")
+}
+
+// =============================================================================
+//  Messaging Gateway — Meta integration
+// =============================================================================
+
+model WhatsAppIntegration {
+  id                   String    @id @default(cuid())
+  tenantId             String    @map("tenant_id")
+  // Phone-number ID returned by Meta. Globally unique across all tenants.
+  phoneNumberId        String    @unique @map("phone_number_id")
+  businessAccountId    String    @map("business_account_id")
+  displayPhoneNumber   String    @map("display_phone_number")
+  // Access token AES-256-GCM encrypted with ENCRYPTION_KEY. Never logged.
+  accessTokenEncrypted String    @map("access_token_encrypted")
+  // Per-tenant verify token used by Meta during webhook handshake.
+  webhookVerifyToken   String    @map("webhook_verify_token")
+  isActive             Boolean   @default(false) @map("is_active")
+  isVerified           Boolean   @default(false) @map("is_verified")
+  verifiedAt           DateTime? @map("verified_at")
+  lastSyncAt           DateTime? @map("last_sync_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  // Relations
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  conversations Conversation[]
+
+  @@unique([tenantId, phoneNumberId])
+  @@index([tenantId, isActive])
+  @@map("whatsapp_integrations")
+}
+
+// =============================================================================
+//  Contacts & CRM
+// =============================================================================
+
+model Contact {
+  id                String  @id @default(cuid())
+  tenantId          String  @map("tenant_id")
+  // WhatsApp ID (raw phone number with country code, no plus). Unique per tenant.
+  waId              String  @map("wa_id")
+  displayName       String? @map("display_name")
+  pushName          String? @map("push_name")
+  profilePictureUrl String? @map("profile_picture_url")
+  email             String?
+  // E.164 formatted ("+573001234567") for outbound SMS / display purposes.
+  phoneNumber       String? @map("phone_number")
+  // Tenant-defined free-form attributes (use sparingly, prefer typed columns).
+  attributes        Json?
+  tags              String[]
+  // 0–100 score from the AI agent. Re-computed on each conversation event.
+  leadScore         Int?    @map("lead_score")
+  isBlocked         Boolean @default(false) @map("is_blocked")
+
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdBy   String?  @map("created_by")
+  updatedBy   String?  @map("updated_by")
+
+  // Relations
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  conversations Conversation[]
+
+  @@unique([tenantId, waId])
+  @@index([tenantId, lastSeenAt(sort: Desc)])
+  @@index([tenantId, leadScore(sort: Desc)])
+  @@index([tenantId, isBlocked])
+  @@map("contacts")
+}
+
+// =============================================================================
+//  Conversations & Inbox
+// =============================================================================
+
+model Conversation {
+  id                     String             @id @default(cuid())
+  tenantId               String             @map("tenant_id")
+  contactId              String             @map("contact_id")
+  whatsappIntegrationId  String             @map("whatsapp_integration_id")
+  status                 ConversationStatus @default(OPEN)
+  assignedUserId         String?            @map("assigned_user_id")
+  // Whether the AI bot is currently driving this conversation. Toggled to
+  // false at handoff and back to true if the agent re-engages the bot.
+  isBotActive            Boolean            @default(true) @map("is_bot_active")
+  lastMessageAt          DateTime           @map("last_message_at")
+  lastMessagePreview     String?            @map("last_message_preview")
+  // AI-produced summary delivered to the human at handoff time.
+  aiSummary              String?            @map("ai_summary")
+  aiIntent               String?            @map("ai_intent")
+  aiLeadScore            Int?               @map("ai_lead_score")
+  unreadCount            Int                @default(0) @map("unread_count")
+  // Tenant-defined tags applied at the conversation level.
+  tags                   String[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  // Relations
+  tenant               Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  contact              Contact             @relation(fields: [contactId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  whatsappIntegration  WhatsAppIntegration @relation(fields: [whatsappIntegrationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  assignee             User?               @relation("ConversationAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  messages             Message[]
+  assignmentLogs       AssignmentLog[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, lastMessageAt(sort: Desc)])
+  @@index([tenantId, assignedUserId, status])
+  @@index([tenantId, contactId])
+  @@index([tenantId, isBotActive])
+  @@map("conversations")
+}
+
+model Message {
+  id              String           @id @default(cuid())
+  tenantId        String           @map("tenant_id")
+  conversationId  String           @map("conversation_id")
+  // Meta's message ID (wamid.*). Used for idempotency on inbound webhooks.
+  // Nullable for system / bot-internal events that have no Meta counterpart.
+  waMessageId     String?          @map("wa_message_id")
+  direction       MessageDirection
+  type            MessageType
+  // For OUTBOUND messages sent by a human agent. Null when sent by the bot
+  // (then `isFromBot = true`) or when direction is INBOUND.
+  senderUserId    String?          @map("sender_user_id")
+  isFromBot       Boolean          @default(false) @map("is_from_bot")
+  content         String?          // Text body or transcript.
+  mediaUrl        String?          @map("media_url")
+  mediaMimeType   String?          @map("media_mime_type")
+  mediaSizeBytes  Int?             @map("media_size_bytes")
+  mediaCaption    String?          @map("media_caption")
+  templateName    String?          @map("template_name")
+  templateLanguage String?         @map("template_language")
+  // Provider-shape payload (interactive buttons, location, contacts card…)
+  metadata        Json?
+  status          MessageStatus    @default(PENDING)
+  failureReason   String?          @map("failure_reason")
+  deliveredAt     DateTime?        @map("delivered_at")
+  readAt          DateTime?        @map("read_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  sender       User?        @relation("MessageSender", fields: [senderUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  // Idempotency: same wa_message_id within the same tenant must collide.
+  @@unique([tenantId, waMessageId])
+  @@index([tenantId, conversationId, createdAt])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, direction, status])
+  @@map("messages")
+}
+
+// =============================================================================
+//  AI Orchestration
+// =============================================================================
+
+model BotConfig {
+  id                    String  @id @default(cuid())
+  tenantId              String  @map("tenant_id")
+  name                  String  @default("Default")
+  isActive              Boolean @default(true) @map("is_active")
+  isDefault             Boolean @default(false) @map("is_default")
+  // The system prompt text fed to Claude on every turn. May be long.
+  systemPrompt          String  @map("system_prompt") @db.Text
+  welcomeMessage        String? @map("welcome_message") @db.Text
+  handoffMessage        String? @map("handoff_message") @db.Text
+  offHoursMessage       String? @map("off_hours_message") @db.Text
+  // Anthropic model identifier (defaults align with .env).
+  model                 String  @default("claude-sonnet-4-6")
+  temperature           Float   @default(0.7)
+  maxTokens             Int     @default(1024) @map("max_tokens")
+  contextWindowMessages Int     @default(20) @map("context_window_messages")
+  autoReplyEnabled      Boolean @default(false) @map("auto_reply_enabled")
+  // Confidence threshold above which the bot may auto-reply without review.
+  autoReplyConfidence   Float   @default(0.75) @map("auto_reply_confidence")
+  // Tenant catalog & FAQs surfaced as context to the LLM.
+  products              Json?
+  faqs                  Json?
+  businessHours         Json?   @map("business_hours")
+  // Per-tenant cap on monthly Claude tokens. Null = unlimited.
+  monthlyTokenBudget    Int?    @map("monthly_token_budget")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([tenantId, isActive])
+  @@index([tenantId, isDefault])
+  @@map("bot_configs")
+}
+
+// =============================================================================
+//  Routing & Workload
+// =============================================================================
+
+model AssignmentLog {
+  id              String        @id @default(cuid())
+  tenantId        String        @map("tenant_id")
+  conversationId  String        @map("conversation_id")
+  fromUserId      String?       @map("from_user_id")
+  toUserId        String?       @map("to_user_id")
+  isBotInvolved   Boolean       @default(false) @map("is_bot_involved")
+  reason          HandoffReason
+  notes           String?
+  at              DateTime      @default(now())
+
+  // Relations
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  fromUser     User?        @relation("AssignmentFrom", fields: [fromUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  toUser       User?        @relation("AssignmentTo", fields: [toUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([tenantId, conversationId])
+  @@index([tenantId, at(sort: Desc)])
+  @@index([tenantId, toUserId])
+  @@map("assignment_logs")
+}
+
+// =============================================================================
+//  Audit log — immutable trail of every privileged action
+// =============================================================================
+
+model AuditEvent {
+  id            String         @id @default(cuid())
+  tenantId      String         @map("tenant_id")
+  actorUserId   String?        @map("actor_user_id")
+  actorType     AuditActorType @default(USER) @map("actor_type")
+  action        String
+  resourceType  String?        @map("resource_type")
+  resourceId    String?        @map("resource_id")
+  beforeState   Json?          @map("before_state")
+  afterState    Json?          @map("after_state")
+  metadata      Json?
+  ipAddress     String?        @map("ip_address")
+  userAgent     String?        @map("user_agent")
+  // Correlates the event with logs and traces.
+  traceId       String?        @map("trace_id")
+  at            DateTime       @default(now())
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  actor  User?  @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([tenantId, at(sort: Desc)])
+  @@index([tenantId, actorUserId])
+  @@index([tenantId, action])
+  @@index([tenantId, resourceType, resourceId])
+  @@map("audit_events")
+}
