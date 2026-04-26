@@ -13,7 +13,7 @@
     "url": "https://github.com/gerenciagnt-blip/automatizacion.git"
   },
   "engines": {
-    "node": ">=20.0.0 <21.0.0",
+    "node": ">=24.0.0 <25.0.0",
     "pnpm": ">=10.0.0"
   },
   "packageManager": "pnpm@10.33.0",

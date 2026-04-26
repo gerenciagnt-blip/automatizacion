@@ -4,7 +4,7 @@
 > AI-native, omnichannel-ready, built for B2B SaaS.
 
 [![Status](https://img.shields.io/badge/status-Sprint%200-blue)]()
-[![Node](https://img.shields.io/badge/node-20%20LTS-green)]()
+[![Node](https://img.shields.io/badge/node-24%20LTS-green)]()
 [![pnpm](https://img.shields.io/badge/pnpm-10.x-orange)]()
 [![License](https://img.shields.io/badge/license-Proprietary-red)]()
 
@@ -52,7 +52,7 @@ cd orion
 pnpm install
 
 # Verify
-node --version   # Must be v20.x
+node --version   # Must be v24.x
 pnpm --version   # Must be >= 10.0.0
 docker --version # Required from Sprint 2
 ```
@@ -63,7 +63,7 @@ docker --version # Required from Sprint 2
 
 ## Tech stack (planned)
 
-**Backend** — Node 20 LTS + TypeScript 5 strict · Express + Helmet · Prisma + PostgreSQL 16 · Redis 7 · BullMQ · Zod · Pino · Argon2id · JWT
+**Backend** — Node 24 LTS + TypeScript 5 strict · Express + Helmet · Prisma + PostgreSQL 16 · Redis 7 · BullMQ · Zod · Pino · Argon2id · JWT
 **Frontend** — React 18 + Vite + TypeScript · Zustand · TanStack Query · Tailwind + shadcn/ui · React Hook Form · socket.io-client
 **Tooling** — pnpm workspaces + Turborepo · Biome · Husky + lint-staged + commitlint · Vitest + Supertest + Testcontainers · Playwright
 **Infra** — Docker · GitHub Actions · DigitalOcean (Droplet + Managed Postgres + Managed Redis) · Vercel (frontend) · Sentry · Grafana
