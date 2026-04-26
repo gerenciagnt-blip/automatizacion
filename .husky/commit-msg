@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# Commit-message hook — enforces Conventional Commits via commitlint.
+# The commit message file is passed as the first argument ($1).
+
+pnpm exec commitlint --edit "$1"

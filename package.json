@@ -19,15 +19,50 @@
   "packageManager": "pnpm@10.33.2",
   "scripts": {
     "preinstall": "npx only-allow pnpm",
-    "build": "echo 'Build pipeline configured in Sprint 1'",
-    "dev": "echo 'Dev pipeline configured in Sprint 2'",
-    "test": "echo 'Test pipeline configured in Sprint 2'",
-    "lint": "echo 'Linter (Biome) configured in Sprint 1'",
-    "format": "echo 'Formatter (Biome) configured in Sprint 1'",
-    "typecheck": "echo 'Typecheck configured in Sprint 1'"
+    "prepare": "husky",
+    "build": "pnpm -r --filter=./apps/* build",
+    "dev": "pnpm --filter @orion/api dev",
+    "start": "pnpm --filter @orion/api start",
+    "test": "pnpm -r --filter=./apps/* --filter=./packages/* test",
+    "test:coverage": "pnpm --filter @orion/api test:coverage",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "ci": "biome ci .",
+    "db:generate": "pnpm --filter @orion/api db:generate",
+    "db:migrate": "pnpm --filter @orion/api db:migrate",
+    "db:reset": "pnpm --filter @orion/api db:reset",
+    "db:studio": "pnpm --filter @orion/api db:studio",
+    "db:format": "pnpm --filter @orion/api db:format",
+    "docker:up": "docker compose -f ops/docker/docker-compose.yml up -d",
+    "docker:down": "docker compose -f ops/docker/docker-compose.yml down",
+    "docker:logs": "docker compose -f ops/docker/docker-compose.yml logs -f",
+    "docker:reset": "docker compose -f ops/docker/docker-compose.yml down -v"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@commitlint/cli": "^19.6.0",
+    "@commitlint/config-conventional": "^19.6.0",
+    "@commitlint/types": "^19.5.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.10",
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,json}": [
+      "biome check --write --no-errors-on-unmatched"
+    ]
+  },
   "pnpm": {
-    "onlyBuiltDependencies": []
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "prisma"
+    ]
   }
 }

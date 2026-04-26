@@ -43,10 +43,7 @@ const csvList = z
 const secret = (minLength: number, label: string) =>
   z
     .string()
-    .min(
-      minLength,
-      `${label} must be at least ${minLength} characters (cryptographic strength)`,
-    );
+    .min(minLength, `${label} must be at least ${minLength} characters (cryptographic strength)`);
 
 /* -------------------------------------------------------------------------- */
 /*  Schema                                                                    */
@@ -66,11 +63,7 @@ export const EnvSchema = z.object({
     .string()
     .url("Must be a valid Postgres connection string")
     .startsWith("postgresql://", "Must start with postgresql://"),
-  DATABASE_URL_TEST: z
-    .string()
-    .url()
-    .startsWith("postgresql://")
-    .optional(),
+  DATABASE_URL_TEST: z.string().url().startsWith("postgresql://").optional(),
 
   /* ---------- Cache / Queue / Pub-Sub ---------- */
   REDIS_URL: z
@@ -85,7 +78,11 @@ export const EnvSchema = z.object({
   JWT_ACCESS_SECRET: secret(32, "JWT_ACCESS_SECRET"),
   JWT_REFRESH_SECRET: secret(32, "JWT_REFRESH_SECRET"),
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900), // 15 min
-  JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(60 * 60 * 24 * 14), // 14 d
+  JWT_REFRESH_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60 * 60 * 24 * 14), // 14 d
 
   /* ---------- Cryptography (at-rest) ---------- */
   ENCRYPTION_KEY: secret(32, "ENCRYPTION_KEY"),
@@ -146,9 +143,7 @@ const EnvSchemaWithRules = EnvSchema.superRefine((env, ctx) => {
 
   // Production must use HTTPS origins only
   if (env.NODE_ENV === "production") {
-    const insecure = env.CORS_ORIGINS.filter(
-      (o) => !o.startsWith("https://"),
-    );
+    const insecure = env.CORS_ORIGINS.filter((o) => !o.startsWith("https://"));
     if (insecure.length > 0) {
       ctx.addIssue({
         code: "custom",

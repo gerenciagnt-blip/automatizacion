@@ -26,6 +26,8 @@ collide on the same index.
 | [0003](./0003-biome-over-eslint-prettier.md) | Biome as the single linter and formatter | Accepted |
 | [0004](./0004-latest-stable-versioning-policy.md) | Default to the latest stable release of every dependency | Accepted |
 | [0005](./0005-claude-sonnet-46-default-model.md) | Claude Sonnet 4.6 default, Haiku 4.5 reserved for optimisation | Accepted |
+| [0006](./0006-extensibility-via-outbound-webhooks-not-n8n.md) | Tenant-side extensibility via outbound webhooks + public API, not embedded n8n | Accepted |
+| [0007](./0007-hexagonal-structure-apps-api.md) | Hexagonal architecture inside `apps/api` | Accepted |
 
 ## When to write an ADR
 

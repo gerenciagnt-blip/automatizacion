@@ -16,7 +16,10 @@
       "import": "./src/env.ts"
     }
   },
-  "files": ["src", "README.md"],
+  "files": [
+    "src",
+    "README.md"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "echo 'Vitest configured in Sprint 2'"

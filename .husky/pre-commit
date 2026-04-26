@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# Pre-commit hook — runs Biome on staged files via lint-staged.
+# Fast (sub-second on a small change set) thanks to Biome's Rust core.
+
+pnpm exec lint-staged

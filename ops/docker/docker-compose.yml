@@ -1,0 +1,72 @@
+# =============================================================================
+#  ORION — local development stack
+#  Postgres 17 (data plane) + Redis 8 (queue / pub-sub / cache).
+#  Bring up with:
+#      docker compose -f ops/docker/docker-compose.yml up -d
+#  Bring down with:
+#      docker compose -f ops/docker/docker-compose.yml down
+#  Wipe volumes (DESTRUCTIVE — drops all local data):
+#      docker compose -f ops/docker/docker-compose.yml down -v
+# =============================================================================
+
+name: orion
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: orion-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: orion
+      POSTGRES_PASSWORD: orion
+      POSTGRES_DB: orion_dev
+      # Initialise a separate database for tests so dev/test never collide.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orion -d orion_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    command:
+      - "postgres"
+      - "-c"
+      - "log_statement=none"
+      - "-c"
+      - "log_connections=off"
+      - "-c"
+      - "log_disconnections=off"
+      - "-c"
+      - "max_connections=200"
+
+  redis:
+    image: redis:8-alpine
+    container_name: orion-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+      - "--maxmemory-policy"
+      - "noeviction"
+
+volumes:
+  postgres_data:
+    name: orion_postgres_data
+  redis_data:
+    name: orion_redis_data
